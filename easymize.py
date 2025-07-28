@@ -1,6 +1,16 @@
-# from collections import defaultdict
-# from bisect  import bisect_right
+from collections import defaultdict
+from bisect  import bisect_right
+from time import sleep
 
+# Global declarations
+group = {}
+leftout = set()
+seen = set()
+ans = []
+parameters = []
+variables = 0
+
+# Helper functions
 def tobin(num , bits):
     binary_str = ""
     for i in range(bits - 1 , -1 , -1):
@@ -11,12 +21,12 @@ def tobin(num , bits):
             binary_str += '0'
     return binary_str
 
-# def groupbyOnes(parameters):
-#     group = defaultdict(set)
-#     for s in parameters:
-#         one_count = s.count('1')
-#         group[one_count].add(s)
-#     return group
+def groupbyOnes(parameters):
+    group = defaultdict(list)
+    for s in parameters:
+        one_count = s.count('1')
+        group[one_count].append(s)
+    return group
 
 def validBits(s , t):
     l1 = list(s)
@@ -32,44 +42,63 @@ def validBits(s , t):
         return ''.join(l2)
     return False
 
-variables = int(input("Enter the number of variables: "))
-size = int(input('Enter the number of parameters to add: '))
-parameters = list(int(input('Enter the non-duplicate parameter: ')) for _ in range(size))
-parameters = list(tobin(num , variables) for num in parameters)
-# group = groupbyOnes(parameters)
-# print('Group: ' , group)
-ans = []
-leftout = []
-def minimize(parameters):
-    leftout.clear() 
-    global ans
-    while parameters:
-        seen = set()
-        stk = []
-        # Stores the terms that has been used to merge into another term
-        used = set()
-        for i in range(len(parameters)):
-            for j in range(i + 1, len(parameters)):
-                valid = validBits(parameters[i], parameters[j])
-                if valid:
-                    if valid not in seen:
-                        # construct the new table for later iteration
-                        stk.append(valid)
-                        seen.add(valid)
-                    # Add the used terms that turned out to be valid
-                    used.add(parameters[i])
-                    used.add(parameters[j])
-        # Add all uncombined parameters to leftout
-        for term in parameters:
-            # Add the uncombined terms into the leftout
-            if term not in used:
-                leftout.append(term)
-        # If there are no terms that can be merged and hence the stack is empty then copy the last calculated list that is parameter in this case
-        if not stk:
-            ans[:] = parameters
+def get_next_key(d, current_key):
+    # gets the next key for the given current key to compare the current group with the next group
+    keys = sorted(d.keys())
+    idx = bisect_right(keys, current_key)
+    return keys[idx] if idx < len(keys) - 1 else None
+
+def minimize():
+    global group
+    leftout.clear()
+    while True:
+        merged = False
+        any_merged = False
+        for key in group.keys():
+            current_group = key
+            next_group = get_next_key(group , key)
+            if next_group and group[current_group]:
+                # if any single combination found update the any_merged to True
+                merged = tabulation(current_group , next_group)
+                if merged:
+                    any_merged = True
+        # if no combination is found , that's where we'll end the algorithm.
+        if not any_merged:
             break
-        # Assign the new stack to the prameters for further minimization
+
+def tabulation(current_group , next_group):
+    global group , leftout , seen
+    # Stores the used terms to filter out the not used terms into the leftout array.
+    used = set()
+    # Stack to maintain the state of the new_terms being made for further iterations
+    stk = []
+    merged = False
+    for s in group[current_group]:
+        for cs in group[next_group]:
+            new_term = validBits(s , cs)
+            if new_term:
+                if new_term not in seen:
+                    stk.append(new_term)
+                    seen.add(new_term)
+                    merged = True
+                used.add(s)
+                used.add(cs)
+
+    for term in parameters:
+        # Add the uncombined terms into the leftout
+        if term not in used:
+            leftout.add(term)
+
+    if stk:  
+        # Update the group with the new stack for further iterations.
+        group[current_group].clear()
+        group[current_group].extend(stk)
         parameters[:] = sorted(set(stk))
+    else:
+        ans[:] = parameters
+    print(f'current group: {current_group} => {group[current_group]} || next group: {next_group} => {group[next_group]}')
+    sleep(0.5)
+    return merged
 
 # Follows mostly the same logic as the minimization function.
 def dissolveLeftout(li):
@@ -83,6 +112,7 @@ def dissolveLeftout(li):
         new_terms = set()
         # Stores the used terms that can be merged
         used = set()
+        li = list(sorted(valid_set))
         for i in range(len(li)):
             for j in range(i + 1, len(li)):
                 valid = validBits(li[i], li[j])
@@ -99,7 +129,6 @@ def dissolveLeftout(li):
 
 def generateAnswer(li):
     sum = ""
-    # Only supported for max 4 variables.
     alphabets = ''
     for i in range(variables):
         alphabets += chr(ord('A') + i)
@@ -114,7 +143,29 @@ def generateAnswer(li):
     # to remove the last '_+_' from the final answer
     return sum[:len(sum) - 3]
 
-minimize(sorted(parameters))
-valid_list = ans + leftout
-dissolveLeftout(valid_list)
-print(generateAnswer(ans))
+# Main function.
+def main():
+    global variables, parameters, group, seen, ans, leftout
+
+    variables = int(input("Enter the number of variables: "))
+    size = int(input("Enter the number of minterms: "))
+    raw_params = list(int(input(f"Enter minterm {i + 1}: ")) for i in range(size))
+
+    parameters = list(tobin(num, variables) for num in raw_params)
+    group = groupbyOnes(parameters)
+    seen.clear()
+    ans.clear()
+    leftout.clear()
+
+    print("\n--- Minimizing ---")
+    minimize()
+    final_list = ans + list(leftout)
+    dissolveLeftout(final_list)
+
+    print("\n--- Final Answer ---")
+    print("Implicants:", ans)
+    print("SOP:", generateAnswer(ans))
+
+# Run
+if __name__ == "__main__":
+    main()
